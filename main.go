@@ -1,0 +1,130 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"github.com/urfave/cli/v3"
+)
+
+func fetchDanglers(ctx context.Context, namespace string, minAge time.Duration, skipKubeNs bool) error {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		home, err := homeDir()
+		if err != nil {
+			return err
+		}
+		kubeconfig := filepath.Join(home, ".kube", "config")
+		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return err
+	}
+
+	pods, err := clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	services, _ := clientset.CoreV1().Services("").List(ctx, metav1.ListOptions{})
+
+	activeSelectors := []labels.Selector{}
+
+	for _, svc := range services.Items {
+		if len(svc.Spec.Selector) > 0 {
+			activeSelectors = append(activeSelectors, labels.SelectorFromSet(svc.Spec.Selector))
+		}
+	}
+
+	for _, pod := range pods.Items {
+		// If this is required - skip checking pods from namespaces like kube-system, kube-public etc.
+		if skipKubeNs && strings.HasPrefix(pod.Namespace, "kube-") { continue }
+
+		// Skip pods that are younger than maxAge (e.g. newly initialised or temporary/debug)
+		if time.Since(pod.CreationTimestamp.Time) < minAge { continue }
+
+		// Skip pods that are part of a Job
+		if len(pod.OwnerReferences) > 0 {
+			isPartOfJob := false
+
+			for _, ref := range pod.OwnerReferences {
+				if ref.Kind == "Job" {
+					isPartOfJob = true
+				}
+			}
+
+			if isPartOfJob { continue }
+		}
+
+		isMatched := false
+
+		for _, selector := range activeSelectors {
+			if selector.Matches(labels.Set(pod.Labels)) {
+				isMatched = true
+				break
+			}
+		}
+		if !isMatched {
+			fmt.Printf("Dangling Pod: [%s] %-20s (Age: %s)\n",
+				pod.Namespace, pod.Name, time.Since(pod.CreationTimestamp.Time).Round(time.Second))
+		}
+	}
+	return nil
+}
+
+func homeDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("could not determine home directory")
+	}
+
+	return home, nil
+}
+
+func main() {
+	cmd := &cli.Command{
+		Name: "dangler",
+		Usage: "find potentially dangling Pods (attached to no Service)",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name: "namespace",
+				Value: "",
+				Usage: "namespace to check for dangling pods (default: look through all namespaces)",
+			},
+			&cli.DurationFlag{
+				Name: "min-age",
+				Value: time.Hour,
+				Usage: "minimal age of potentially dangling pods",
+			},
+			&cli.BoolFlag{
+				Name: "skip-kube-ns",
+				Usage: "whether to skip checking the kube namespaces",
+			},
+		},
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			namespace := cmd.String("namespace")
+			minAge := cmd.Duration("min-age")
+			skipKubeNs := cmd.Bool("skip-kube-ns")
+			return fetchDanglers(ctx, namespace, minAge, skipKubeNs)
+		},
+	}
+	if err := cmd.Run(context.Background(), os.Args); err != nil {
+		log.Fatal(err)
+	}
+}
