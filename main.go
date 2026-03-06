@@ -17,6 +17,8 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+const VERSION string = "0.1.0"
+
 func fetchDanglers(ctx context.Context, namespace string, minAge time.Duration, skipKubeNs bool) error {
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -104,6 +106,7 @@ func main() {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name: "namespace",
+				Aliases: []string{"n"},
 				Value: "",
 				Usage: "namespace to check for dangling pods (default: look through all namespaces)",
 			},
@@ -116,8 +119,17 @@ func main() {
 				Name: "skip-kube-ns",
 				Usage: "whether to skip checking the kube namespaces",
 			},
+			&cli.BoolFlag{
+				Name: "version",
+				Usage: "print version number and exit",
+			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
+			version := cmd.Bool("version")
+			if version {
+				fmt.Println(VERSION)
+				return nil
+			}
 			namespace := cmd.String("namespace")
 			minAge := cmd.Duration("min-age")
 			skipKubeNs := cmd.Bool("skip-kube-ns")
