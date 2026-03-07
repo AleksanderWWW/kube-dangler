@@ -14,6 +14,7 @@ This tool helps you identify:
 * **Context-Aware:** Automatically detects if it's running inside a cluster (using In-Cluster config) or locally (using `~/.kube/config`).
 * **Noise Reduction:** Automatically ignores Pods owned by **Jobs** (which are naturally service-less).
 * **Namespace Scoping:** Filter by a specific namespace or scan the entire cluster.
+* **Safety First:** Kube-* namespaces (e.g. `kube-system`, `kube-public` etc.) excluded from search by default.
 
 ## Installation
 
@@ -56,7 +57,7 @@ USAGE:
 GLOBAL OPTIONS:
    --namespace string, -n string  namespace to check for dangling pods (default: look through all namespaces)
    --min-age duration             minimal age of potentially dangling pods (default: 1h0m0s)
-   --skip-kube-ns                 whether to skip checking the kube namespaces
+   --include-kube-ns              whether to also include checking the kube namespaces
    --version                      print version number and exit
    --help, -h                     show help
 ```

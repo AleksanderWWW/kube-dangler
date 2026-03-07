@@ -19,7 +19,7 @@ import (
 
 const VERSION string = "0.1.0"
 
-func fetchDanglers(ctx context.Context, namespace string, minAge time.Duration, skipKubeNs bool) error {
+func fetchDanglers(ctx context.Context, namespace string, minAge time.Duration, includeKubeNs bool) error {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		home, err := homeDir()
@@ -55,8 +55,8 @@ func fetchDanglers(ctx context.Context, namespace string, minAge time.Duration, 
 	}
 
 	for _, pod := range pods.Items {
-		// If this is required - skip checking pods from namespaces like kube-system, kube-public etc.
-		if skipKubeNs && strings.HasPrefix(pod.Namespace, "kube-") { continue }
+		// skip checking pods from namespaces like kube-system, kube-public etc. unless required
+		if !includeKubeNs && strings.HasPrefix(pod.Namespace, "kube-") { continue }
 
 		// Skip pods that are younger than maxAge (e.g. newly initialised or temporary/debug)
 		if time.Since(pod.CreationTimestamp.Time) < minAge { continue }
@@ -116,8 +116,8 @@ func main() {
 				Usage: "minimal age of potentially dangling pods",
 			},
 			&cli.BoolFlag{
-				Name: "skip-kube-ns",
-				Usage: "whether to skip checking the kube namespaces",
+				Name: "include-kube-ns",
+				Usage: "whether to also include checking the kube namespaces",
 			},
 			&cli.BoolFlag{
 				Name: "version",
@@ -132,8 +132,8 @@ func main() {
 			}
 			namespace := cmd.String("namespace")
 			minAge := cmd.Duration("min-age")
-			skipKubeNs := cmd.Bool("skip-kube-ns")
-			return fetchDanglers(ctx, namespace, minAge, skipKubeNs)
+			includeKubeNs := cmd.Bool("include-kube-ns")
+			return fetchDanglers(ctx, namespace, minAge, includeKubeNs)
 		},
 	}
 	if err := cmd.Run(context.Background(), os.Args); err != nil {
