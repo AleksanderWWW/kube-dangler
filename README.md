@@ -34,7 +34,7 @@ From Github Releases:
 ```shell
 export TAG="0.1.0"
 
-wget https://github.com/AleksanderWWW/kube-dangler/releases/download/${TAG}$/kubedangler-${TAG}.tar.gz
+wget https://github.com/AleksanderWWW/kube-dangler/releases/download/${TAG}/kubedangler-${TAG}.tar.gz
 
 tar -xzf kubedangler-${TAG}.tar.gz
 
