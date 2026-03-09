@@ -49,10 +49,10 @@ Expected output:
 ```terminaloutput
 $ ./kubedangler --help
 NAME:
-   dangler - find potentially dangling Pods (attached to no Service)
+   kubedangler - find potentially dangling Pods (attached to no Service)
 
 USAGE:
-   dangler [global options]
+   kubedangler [global options]
 
 GLOBAL OPTIONS:
    --namespace string, -n string  namespace to check for dangling pods (default: look through all namespaces)

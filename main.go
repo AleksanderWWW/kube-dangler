@@ -9,15 +9,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/urfave/cli/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"github.com/urfave/cli/v3"
 )
 
 const VERSION string = "0.1.0"
+
+const SKIP_ANNOTATION_NAME string = "kubedangler/skip"
+const SKIP_ANNOTATION_VALUE string = "true"
+
 
 func fetchDanglers(ctx context.Context, namespace string, minAge time.Duration, includeKubeNs bool) error {
 	config, err := rest.InClusterConfig()
@@ -57,6 +61,10 @@ func fetchDanglers(ctx context.Context, namespace string, minAge time.Duration, 
 	for _, pod := range pods.Items {
 		// skip checking pods from namespaces like kube-system, kube-public etc. unless required
 		if !includeKubeNs && strings.HasPrefix(pod.Namespace, "kube-") { continue }
+		
+		// skip pods with special annotation
+		skipAnnotation, ok := pod.Annotations[SKIP_ANNOTATION_NAME]
+		if ok && skipAnnotation == SKIP_ANNOTATION_VALUE { continue }
 
 		// Skip pods that are younger than maxAge (e.g. newly initialised or temporary/debug)
 		if time.Since(pod.CreationTimestamp.Time) < minAge { continue }
@@ -83,7 +91,7 @@ func fetchDanglers(ctx context.Context, namespace string, minAge time.Duration, 
 			}
 		}
 		if !isMatched {
-			fmt.Printf("Dangling Pod: [%s] %-20s (Age: %s)\n",
+			fmt.Printf("[%s] %-20s (Age: %s)\n",
 				pod.Namespace, pod.Name, time.Since(pod.CreationTimestamp.Time).Round(time.Second))
 		}
 	}
@@ -101,7 +109,7 @@ func homeDir() (string, error) {
 
 func main() {
 	cmd := &cli.Command{
-		Name: "dangler",
+		Name: "kubedangler",
 		Usage: "find potentially dangling Pods (attached to no Service)",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
