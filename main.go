@@ -22,7 +22,6 @@ const VERSION string = "0.1.0"
 const SKIP_ANNOTATION_NAME string = "kubedangler/skip"
 const SKIP_ANNOTATION_VALUE string = "true"
 
-
 func fetchDanglers(ctx context.Context, namespace string, minAge time.Duration, includeKubeNs bool) error {
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -60,14 +59,20 @@ func fetchDanglers(ctx context.Context, namespace string, minAge time.Duration, 
 
 	for _, pod := range pods.Items {
 		// skip checking pods from namespaces like kube-system, kube-public etc. unless required
-		if !includeKubeNs && strings.HasPrefix(pod.Namespace, "kube-") { continue }
-		
+		if !includeKubeNs && strings.HasPrefix(pod.Namespace, "kube-") {
+			continue
+		}
+
 		// skip pods with special annotation
 		skipAnnotation, ok := pod.Annotations[SKIP_ANNOTATION_NAME]
-		if ok && skipAnnotation == SKIP_ANNOTATION_VALUE { continue }
+		if ok && skipAnnotation == SKIP_ANNOTATION_VALUE {
+			continue
+		}
 
 		// Skip pods that are younger than maxAge (e.g. newly initialised or temporary/debug)
-		if time.Since(pod.CreationTimestamp.Time) < minAge { continue }
+		if time.Since(pod.CreationTimestamp.Time) < minAge {
+			continue
+		}
 
 		// Skip pods that are part of a Job
 		if len(pod.OwnerReferences) > 0 {
@@ -79,7 +84,9 @@ func fetchDanglers(ctx context.Context, namespace string, minAge time.Duration, 
 				}
 			}
 
-			if isPartOfJob { continue }
+			if isPartOfJob {
+				continue
+			}
 		}
 
 		isMatched := false
@@ -109,26 +116,26 @@ func homeDir() (string, error) {
 
 func main() {
 	cmd := &cli.Command{
-		Name: "kubedangler",
+		Name:  "kubedangler",
 		Usage: "find potentially dangling Pods (attached to no Service)",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name: "namespace",
+				Name:    "namespace",
 				Aliases: []string{"n"},
-				Value: "",
-				Usage: "namespace to check for dangling pods (default: look through all namespaces)",
+				Value:   "",
+				Usage:   "namespace to check for dangling pods (default: look through all namespaces)",
 			},
 			&cli.DurationFlag{
-				Name: "min-age",
+				Name:  "min-age",
 				Value: time.Hour,
 				Usage: "minimal age of potentially dangling pods",
 			},
 			&cli.BoolFlag{
-				Name: "include-kube-ns",
+				Name:  "include-kube-ns",
 				Usage: "whether to also include checking the kube namespaces",
 			},
 			&cli.BoolFlag{
-				Name: "version",
+				Name:  "version",
 				Usage: "print version number and exit",
 			},
 		},
