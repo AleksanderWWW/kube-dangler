@@ -60,6 +60,7 @@ GLOBAL OPTIONS:
    --min-age duration             minimal age of potentially dangling pods (default: 1h0m0s)
    --include-kube-ns              whether to also include checking the kube namespaces
    --version                      print version number and exit
+   --fail-on-found                whether to return non-zero exit code when (potentially) dangling pods are found
    --help, -h                     show help
 ```
 
@@ -76,3 +77,11 @@ spec:
 ```
 
 Note that this needs to be the annotation of the **pod**, and **not** the deployment.
+
+## Fail on finding (potentially) dangling pods
+
+Adding `--fail-on-found` flag to the `kubedangler` command causes the program to return a non-zero exit
+code if any service-less pod is found. This is useful for implementing a CI pipeline (e.g. in GitHub Actions)
+that audits a namespace (or an entire cluster) and alerts on presence of potentially wasteful resources.
+It is adviced to combine it with the skip annotation to avert false-positives from workloads you expect
+to have no service attached.
