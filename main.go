@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v3"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -57,7 +57,6 @@ func matchesDanglingCriteria(pod corev1.Pod, activeSelectors []labels.Selector, 
 
 	return true
 }
-
 
 func fetchDanglers(ctx context.Context, namespace string, minAge time.Duration, includeKubeNs bool) error {
 	config, err := rest.InClusterConfig()
