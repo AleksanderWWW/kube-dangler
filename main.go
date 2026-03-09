@@ -11,6 +11,7 @@ import (
 
 	"github.com/urfave/cli/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -21,6 +22,42 @@ const VERSION string = "0.1.0"
 
 const SKIP_ANNOTATION_NAME string = "kubedangler/skip"
 const SKIP_ANNOTATION_VALUE string = "true"
+
+// matchesDanglingCriteria evaluates if a pod is "dangling" based on the provided configuration.
+// Returns true if the pod could potentially be considered dangling (unattached/orphan).
+func matchesDanglingCriteria(pod corev1.Pod, activeSelectors []labels.Selector, minAge time.Duration, includeKubeNs bool) bool {
+	// 1. Skip checking pods from namespaces like kube-system, kube-public etc. unless required
+	if !includeKubeNs && strings.HasPrefix(pod.Namespace, "kube-") {
+		return false
+	}
+
+	// 2. Skip pods with special annotation
+	if val, ok := pod.Annotations[SKIP_ANNOTATION_NAME]; ok && val == SKIP_ANNOTATION_VALUE {
+		return false
+	}
+
+	// 3. Skip pods that are younger than minAge
+	if time.Since(pod.CreationTimestamp.Time) < minAge {
+		return false
+	}
+
+	// 4. Skip pods that are part of a Job (Jobs are expected to be short-lived/unattached)
+	for _, ref := range pod.OwnerReferences {
+		if ref.Kind == "Job" {
+			return false
+		}
+	}
+
+	// 5. Check if any active Service selector matches this pod
+	for _, selector := range activeSelectors {
+		if selector.Matches(labels.Set(pod.Labels)) {
+			return false // It's matched to a service, so it's not dangling
+		}
+	}
+
+	return true
+}
+
 
 func fetchDanglers(ctx context.Context, namespace string, minAge time.Duration, includeKubeNs bool) error {
 	config, err := rest.InClusterConfig()
@@ -58,45 +95,7 @@ func fetchDanglers(ctx context.Context, namespace string, minAge time.Duration, 
 	}
 
 	for _, pod := range pods.Items {
-		// skip checking pods from namespaces like kube-system, kube-public etc. unless required
-		if !includeKubeNs && strings.HasPrefix(pod.Namespace, "kube-") {
-			continue
-		}
-
-		// skip pods with special annotation
-		skipAnnotation, ok := pod.Annotations[SKIP_ANNOTATION_NAME]
-		if ok && skipAnnotation == SKIP_ANNOTATION_VALUE {
-			continue
-		}
-
-		// Skip pods that are younger than maxAge (e.g. newly initialised or temporary/debug)
-		if time.Since(pod.CreationTimestamp.Time) < minAge {
-			continue
-		}
-
-		// Skip pods that are part of a Job
-		if len(pod.OwnerReferences) > 0 {
-			isPartOfJob := false
-
-			for _, ref := range pod.OwnerReferences {
-				if ref.Kind == "Job" {
-					isPartOfJob = true
-				}
-			}
-
-			if isPartOfJob {
-				continue
-			}
-		}
-
-		isMatched := false
-
-		for _, selector := range activeSelectors {
-			if selector.Matches(labels.Set(pod.Labels)) {
-				isMatched = true
-				break
-			}
-		}
+		isMatched := matchesDanglingCriteria(pod, activeSelectors, minAge, includeKubeNs)
 		if !isMatched {
 			fmt.Printf("[%s] %-20s (Age: %s)\n",
 				pod.Namespace, pod.Name, time.Since(pod.CreationTimestamp.Time).Round(time.Second))
