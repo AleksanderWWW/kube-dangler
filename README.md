@@ -15,6 +15,7 @@ This tool helps you identify:
 * **Noise Reduction:** Automatically ignores Pods owned by **Jobs** (which are naturally service-less).
 * **Namespace Scoping:** Filter by a specific namespace or scan the entire cluster.
 * **Safety First:** Kube-* namespaces (e.g. `kube-system`, `kube-public` etc.) excluded from search by default.
+* **Flexibility** Use a special annotation to exclude pods from being listed by the tool.
 
 ## Installation
 
@@ -49,10 +50,10 @@ Expected output:
 ```terminaloutput
 $ ./kubedangler --help
 NAME:
-   dangler - find potentially dangling Pods (attached to no Service)
+   kubedangler - find potentially dangling Pods (attached to no Service)
 
 USAGE:
-   dangler [global options]
+   kubedangler [global options]
 
 GLOBAL OPTIONS:
    --namespace string, -n string  namespace to check for dangling pods (default: look through all namespaces)
@@ -61,3 +62,17 @@ GLOBAL OPTIONS:
    --version                      print version number and exit
    --help, -h                     show help
 ```
+
+## Exclude pods from being listed
+
+If you have pods you know are not attached to any service and want to exclude them from being
+reported by `kube-dangler`, add the following annotation to pod's metadata:
+
+```yaml
+spec:
+  metadata:
+    annotations:
+      kubedangler/skip: "true"
+```
+
+Note that this needs to be the annotation of the **pod**, and **not** the deployment.
