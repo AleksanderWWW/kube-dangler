@@ -58,29 +58,29 @@ func matchesDanglingCriteria(pod corev1.Pod, activeSelectors []labels.Selector, 
 	return true
 }
 
-func fetchDanglers(ctx context.Context, namespace string, minAge time.Duration, includeKubeNs bool) error {
+func fetchDanglers(ctx context.Context, namespace string, minAge time.Duration, includeKubeNs bool) (bool, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		home, err := homeDir()
 		if err != nil {
-			return err
+			return false, err
 		}
 		kubeconfig := filepath.Join(home, ".kube", "config")
 		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
 
 		if err != nil {
-			return err
+			return false, err
 		}
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	pods, err := clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	services, _ := clientset.CoreV1().Services("").List(ctx, metav1.ListOptions{})
@@ -93,14 +93,17 @@ func fetchDanglers(ctx context.Context, namespace string, minAge time.Duration, 
 		}
 	}
 
+	danglingPodsFound := false
+
 	for _, pod := range pods.Items {
 		isMatched := matchesDanglingCriteria(pod, activeSelectors, minAge, includeKubeNs)
-		if !isMatched {
+		if isMatched {
+			danglingPodsFound = true
 			fmt.Printf("[%s] %-20s (Age: %s)\n",
 				pod.Namespace, pod.Name, time.Since(pod.CreationTimestamp.Time).Round(time.Second))
 		}
 	}
-	return nil
+	return danglingPodsFound, nil
 }
 
 func homeDir() (string, error) {
@@ -133,6 +136,10 @@ func main() {
 				Usage: "whether to also include checking the kube namespaces",
 			},
 			&cli.BoolFlag{
+				Name:  "fail-on-found",
+				Usage: "whether to return non-zero exit code when (potentially) dangling pods are found",
+			},
+			&cli.BoolFlag{
 				Name:  "version",
 				Usage: "print version number and exit",
 			},
@@ -146,7 +153,18 @@ func main() {
 			namespace := cmd.String("namespace")
 			minAge := cmd.Duration("min-age")
 			includeKubeNs := cmd.Bool("include-kube-ns")
-			return fetchDanglers(ctx, namespace, minAge, includeKubeNs)
+			danglingPodsFound, err := fetchDanglers(ctx, namespace, minAge, includeKubeNs)
+			if err != nil {
+				return err
+			}
+
+			failOnFound := cmd.Bool("fail-on-found")
+
+			if danglingPodsFound && failOnFound {
+				return cli.Exit("Dangling pods found while '--fail-on-found' flag was set!", 2)
+			}
+
+			return nil
 		},
 	}
 	if err := cmd.Run(context.Background(), os.Args); err != nil {
